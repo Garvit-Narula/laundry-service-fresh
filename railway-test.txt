@@ -1,0 +1,16 @@
+Railway Deployment Test
+========================
+
+This file is created to test Railway deployment for the Laundry Service application.
+
+Timestamp: 2025-06-22T20:19:23+05:30
+
+Application Components:
+- Backend: FastAPI (Python)
+- Frontend: Next.js (TypeScript)
+- Database: Supabase
+
+Deployment Notes:
+- Backend should be deployed from /backend directory
+- Frontend should be deployed from /test-app directory
+- Environment variables need to be configured in Railway dashboard
