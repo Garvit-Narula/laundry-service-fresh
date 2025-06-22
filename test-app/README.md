@@ -1,6 +1,6 @@
-# Laundry Service Frontend
+# Laundry Express Frontend
 
-A Next.js frontend application for the Laundry Service platform.
+A Next.js frontend application for the Laundry Express platform.
 
 ## Features
 

@@ -492,7 +492,7 @@ function SchedulePickupForm({ onSuccess }: { onSuccess: () => void }) {
           {/* Step 3: Service Type */}
           {currentStep === 3 && (
             <div>
-              <h2 className="text-2xl font-semibold text-gray-900 mb-6">Select Laundry Services</h2>
+              <h2 className="text-2xl font-semibold text-gray-900 mb-6">Select Laundry Express</h2>
               <p className="text-gray-600 mb-4">Select items and quantities for your pickup</p>
               <div className="space-y-6 mb-6">
                 {laundryTypes.map((type) => {
@@ -872,7 +872,7 @@ export default function Dashboard() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <div className="flex items-center space-x-8">
-              <h1 className="text-xl font-semibold text-blue-600">Laundry Service</h1>
+              <h1 className="text-xl font-semibold text-blue-600">Laundry Express</h1>
               <div className="flex space-x-8">
                 <button
                   onClick={() => setActiveTab('dashboard')}

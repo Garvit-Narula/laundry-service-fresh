@@ -54,8 +54,8 @@ env_vars = validate_environment()
 
 # Initialize FastAPI app
 app = FastAPI(
-    title="Laundry Service API",
-    description="API for Laundry Service Application",
+    title="Laundry Express API",
+    description="API for Laundry Express Application",
     version="1.0.0",
     docs_url="/docs" if os.getenv("ENVIRONMENT") != "production" else None,
     redoc_url="/redoc" if os.getenv("ENVIRONMENT") != "production" else None,
@@ -66,7 +66,7 @@ app = FastAPI(
 @app.on_event("startup")
 async def startup_event() -> None:
     """Initialize application on startup"""
-    logger.info("🚀 Starting Laundry Service API...")
+    logger.info("🚀 Starting Laundry Express API...")
     logger.info(f"Environment: {os.getenv('ENVIRONMENT', 'development')}")
 
     # Initialize database data if needed
@@ -161,13 +161,13 @@ async def startup_event() -> None:
     except Exception as e:
         logger.warning(f"Database initialization failed (app will continue): {e}")
 
-    logger.info("🎉 Laundry Service API started successfully!")
+    logger.info("🎉 Laundry Express API started successfully!")
 
 
 @app.on_event("shutdown")
 async def shutdown_event() -> None:
     """Cleanup on shutdown"""
-    logger.info("👋 Shutting down Laundry Service API...")
+    logger.info("👋 Shutting down Laundry Express API...")
 
 
 # Configure CORS - Updated for Railway deployment
@@ -1160,7 +1160,7 @@ async def root():
     Root endpoint with API information
     """
     return {
-        "message": "Welcome to the Laundry Service API",
+        "message": "Welcome to the Laundry Express API",
         "version": "1.0.0",
         "status": "operational",
         "docs": "/docs",

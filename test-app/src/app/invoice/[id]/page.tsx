@@ -190,7 +190,7 @@ export default function InvoicePage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-4">
             <Link href="/dashboard" className="text-2xl font-bold text-blue-600">
-              Laundry Service
+              Laundry Express
             </Link>
             <nav className="flex space-x-8">
               <Link href="/dashboard" className="text-gray-600 hover:text-gray-900">Dashboard</Link>
@@ -223,7 +223,7 @@ export default function InvoicePage() {
                 <p className="text-gray-600">#{invoice.id}</p>
               </div>
               <div className="text-right">
-                <h2 className="text-2xl font-bold text-blue-600 mb-2">Laundry Service</h2>
+                <h2 className="text-2xl font-bold text-blue-600 mb-2">Laundry Express</h2>
                 <p className="text-gray-600">Manipal University Jaipur</p>
                 <p className="text-gray-600">Bagru, Jaipur, 300310</p>
                 <p className="text-gray-600">laundry@gmail.com</p>
@@ -326,10 +326,10 @@ export default function InvoicePage() {
                     ) : (
                       <tr>
                         <td className="px-6 py-4 text-sm font-medium text-gray-900">
-                          Laundry Service
+                          Laundry Express
                         </td>
                         <td className="px-6 py-4 text-sm text-gray-500">
-                          Professional laundry service
+                          Professional laundry express
                         </td>
                         <td className="px-6 py-4 text-sm text-gray-900 text-center">
                           1
@@ -374,7 +374,7 @@ export default function InvoicePage() {
               <div>
                 <h4 className="text-lg font-semibold text-gray-900 mb-2">Notes:</h4>
                 <p className="text-gray-600">
-                  Thank you for choosing our laundry service. We appreciate your business!
+                  Thank you for choosing our laundry express. We appreciate your business!
                 </p>
                 {pickupRequest.special_instructions && (
                   <p className="text-gray-600 mt-2">
