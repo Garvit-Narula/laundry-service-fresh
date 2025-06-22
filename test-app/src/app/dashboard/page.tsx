@@ -822,14 +822,36 @@ export default function Dashboard() {
     fetchData();
   }, [router]);
 
+  // Auto-refresh data every 30 seconds when on dashboard or orders tab
+  useEffect(() => {
+    if (activeTab === 'dashboard' || activeTab === 'orders') {
+      const interval = setInterval(refreshData, 30000); // 30 seconds
+      return () => clearInterval(interval);
+    }
+  }, [activeTab]);
+
   // Calculate stats from real data
-  const activeOrders = pickupRequests.filter(req => req.status === 'pending' || req.status === 'confirmed' || req.status === 'paid').length;
+  const activeOrders = pickupRequests.filter(req => req.status === 'pending' || req.status === 'confirmed' || req.status === 'in_progress').length;
   const completedOrders = pickupRequests.filter(req => req.status === 'completed').length;
   const totalSpent = invoices.reduce((sum, invoice) => sum + invoice.amount, 0);
 
   const handleLogout = () => {
     localStorage.removeItem('token');
     router.push('/');
+  };
+
+
+
+  // Function to refresh data
+  const refreshData = async () => {
+    try {
+      const requests = await api.getPickupRequests();
+      const userInvoices = await api.getInvoices();
+      setPickupRequests(requests);
+      setInvoices(userInvoices);
+    } catch (error) {
+      console.error('Error refreshing data:', error);
+    }
   };
 
   if (loading) {
@@ -974,13 +996,15 @@ export default function Dashboard() {
             <div>
               <div className="flex justify-between items-center mb-8">
                 <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-                <span className="text-sm text-gray-600">Welcome, {user?.full_name || 'test4'}</span>
-                <button
-                  onClick={handleLogout}
-                  className="text-sm text-gray-500 hover:text-gray-700"
-                >
-                  Logout
-                </button>
+                <div className="flex items-center space-x-4">
+                  <span className="text-sm text-gray-600">Welcome, {user?.full_name || 'test4'}</span>
+                  <button
+                    onClick={handleLogout}
+                    className="text-sm text-gray-500 hover:text-gray-700"
+                  >
+                    Logout
+                  </button>
+                </div>
               </div>
 
                              {/* Stats Cards */}
@@ -1002,13 +1026,21 @@ export default function Dashboard() {
               {/* Recent Orders Section */}
               <div className="bg-white rounded-lg shadow-sm p-6">
                 <div className="flex justify-between items-center mb-4">
-                  <h2 className="text-xl font-semibold text-gray-900">Recent Orders</h2>
-                  <button 
-                    onClick={() => setActiveTab('schedule')}
-                    className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700"
-                  >
-                    Schedule New Pickup
-                  </button>
+                  <h2 className="text-xl font-semibold text-gray-900">All Orders ({pickupRequests.length})</h2>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={refreshData}
+                      className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors"
+                    >
+                      Refresh
+                    </button>
+                    <button 
+                      onClick={() => setActiveTab('schedule')}
+                      className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700"
+                    >
+                      Schedule New Pickup
+                    </button>
+                  </div>
                 </div>
                 
                                  {pickupRequests.length === 0 ? (
@@ -1044,7 +1076,7 @@ export default function Dashboard() {
                          </tr>
                        </thead>
                        <tbody className="bg-white divide-y divide-gray-200">
-                         {pickupRequests.slice(0, 5).map((request) => (
+                         {pickupRequests.map((request) => (
                            <tr key={request.id}>
                              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                                #{request.id.slice(-6)}
@@ -1052,11 +1084,16 @@ export default function Dashboard() {
                              <td className="px-6 py-4 whitespace-nowrap">
                                <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
                                  request.status === 'completed' ? 'bg-green-100 text-green-800' :
-                                 request.status === 'paid' ? 'bg-blue-100 text-blue-800' :
-                                 request.status === 'confirmed' ? 'bg-yellow-100 text-yellow-800' :
+                                 request.status === 'confirmed' ? 'bg-blue-100 text-blue-800' :
+                                 request.status === 'in_progress' ? 'bg-purple-100 text-purple-800' :
+                                 request.status === 'cancelled' ? 'bg-red-100 text-red-800' :
+                                 request.status === 'pending' && request.payment_confirmed ? 'bg-yellow-100 text-yellow-800' :
                                  'bg-gray-100 text-gray-800'
                                }`}>
-                                 {request.status}
+                                 {request.status === 'pending' && request.payment_confirmed 
+                                   ? 'Payment Received' 
+                                   : request.status.charAt(0).toUpperCase() + request.status.slice(1).replace('_', ' ')
+                                 }
                                </span>
                              </td>
                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -1108,7 +1145,15 @@ export default function Dashboard() {
 
                      {activeTab === 'orders' && (
              <div>
-               <h1 className="text-2xl font-bold text-gray-900 mb-8">My Orders</h1>
+               <div className="flex justify-between items-center mb-8">
+                 <h1 className="text-2xl font-bold text-gray-900">My Orders</h1>
+                 <button
+                   onClick={refreshData}
+                   className="bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors"
+                 >
+                   Refresh
+                 </button>
+               </div>
                <div className="bg-white rounded-lg shadow-sm p-6">
                  {pickupRequests.length === 0 ? (
                    <div className="text-center py-12">
@@ -1157,11 +1202,15 @@ export default function Dashboard() {
                              <td className="px-6 py-4 whitespace-nowrap">
                                <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
                                  request.status === 'completed' ? 'bg-green-100 text-green-800' :
-                                 request.status === 'paid' ? 'bg-blue-100 text-blue-800' :
-                                 request.status === 'confirmed' ? 'bg-yellow-100 text-yellow-800' :
+                                 request.status === 'confirmed' ? 'bg-blue-100 text-blue-800' :
+                                 request.status === 'in_progress' ? 'bg-purple-100 text-purple-800' :
+                                 request.status === 'pending' && request.payment_confirmed ? 'bg-yellow-100 text-yellow-800' :
                                  'bg-gray-100 text-gray-800'
                                }`}>
-                                 {request.status.charAt(0).toUpperCase() + request.status.slice(1)}
+                                 {request.status === 'pending' && request.payment_confirmed 
+                                   ? 'Payment Received - Awaiting Confirmation' 
+                                   : request.status.charAt(0).toUpperCase() + request.status.slice(1)
+                                 }
                                </span>
                              </td>
                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">

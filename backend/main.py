@@ -14,7 +14,7 @@ from pydantic import BaseModel, EmailStr
 from supabase import Client, create_client
 
 # Load environment variables
-load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '.env'))
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"))
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 logger.info(f"SUPABASE_URL loaded: {bool(os.getenv('SUPABASE_URL'))}")
 logger.info(f"SUPABASE_KEY loaded: {bool(os.getenv('SUPABASE_KEY'))}")
 logger.info(f"SECRET_KEY loaded: {bool(os.getenv('SECRET_KEY'))}")
+
 
 # Environment validation
 def validate_environment():
@@ -297,6 +298,7 @@ class PickupRequestResponse(BaseModel):
     service_items: dict[str, dict[str, int]]  # serviceTypeId -> itemId -> quantity
     special_instructions: Optional[str] = None
     status: str
+    payment_confirmed: bool = False
     created_at: datetime
 
 
@@ -331,6 +333,17 @@ class Invoice(BaseModel):
     payment_method: Optional[str] = None
     service_items: Optional[dict[str, dict[str, int]]] = None
     itemized_breakdown: Optional[list[dict]] = None
+
+
+# Add admin credentials from environment variables
+ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin")
+
+
+# Add admin user model after the existing models
+class AdminUser(BaseModel):
+    username: str
+    is_admin: bool = True
 
 
 # Helper functions
@@ -400,6 +413,35 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
         phone_number=user["phone_number"],
         created_at=user["created_at"],
     )
+
+
+# Add admin authentication function after get_current_user
+async def get_current_admin_user(token: str = Depends(oauth2_scheme)):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate admin credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        logger.debug(f"Validating admin token: {token[:10]}...")
+        if not SECRET_KEY or not ALGORITHM:
+            raise ValueError("SECRET_KEY and ALGORITHM must be set")
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username = payload.get("sub")
+        is_admin = payload.get("is_admin", False)
+
+        if username is None or not is_admin:
+            logger.debug("Invalid admin token")
+            raise credentials_exception
+
+        if username != ADMIN_USERNAME:
+            logger.debug(f"Invalid admin username: {username}")
+            raise credentials_exception
+
+        return AdminUser(username=username, is_admin=True)
+    except JWTError as e:
+        logger.debug(f"JWT Error: {str(e)}")
+        raise credentials_exception
 
 
 # Routes
@@ -887,12 +929,17 @@ async def create_payment(
 
         payment_result = response.data[0]
 
-        # Update pickup request status - for cash on delivery, mark as confirmed instead of paid
-        pickup_status = "paid" if payment.payment_method_id != "cash" else "confirmed"
-        supabase.table("pickup_requests").update({"status": pickup_status}).eq(
+        # Mark payment as confirmed but keep order status as "pending"
+        # Admin will manually confirm orders from the dashboard
+        # This gives admin full control over the confirmation process
+        supabase.table("pickup_requests").update({"payment_confirmed": True}).eq(
             "id",
             payment.pickup_request_id,
         ).execute()
+
+        logger.info(
+            f"Payment completed for pickup request {payment.pickup_request_id}. Payment confirmed but status remains 'pending' until admin confirmation.",
+        )
 
         # Create invoice with calculated amount
         estimated_delivery = datetime.now() + timedelta(days=2)
@@ -1120,6 +1167,225 @@ async def root():
         "health": "/health",
         "environment": os.getenv("ENVIRONMENT", "development"),
     }
+
+
+# Add admin login endpoint after the existing login endpoint
+@app.post("/admin/token", response_model=Token)
+async def admin_login(form_data: OAuth2PasswordRequestForm = Depends()):
+    logger.info(f"Admin login attempt for user: {form_data.username}")
+
+    # Validate admin credentials
+    if form_data.username != ADMIN_USERNAME or form_data.password != ADMIN_PASSWORD:
+        logger.error(f"Invalid admin credentials: {form_data.username}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect admin credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": ADMIN_USERNAME, "is_admin": True},
+        expires_delta=access_token_expires,
+    )
+    logger.info(f"Generated admin token for user {form_data.username}")
+    return {"access_token": access_token, "token_type": "bearer"}
+
+
+# Add admin endpoints after the existing endpoints
+@app.get("/admin/pickup-requests")
+async def get_all_pickup_requests(
+    current_admin: AdminUser = Depends(get_current_admin_user),
+):
+    """Get all pickup requests for admin dashboard"""
+    try:
+        # Get all pickup requests with user information
+        response = (
+            supabase.table("pickup_requests")
+            .select("*")
+            .order("created_at", desc=True)
+            .execute()
+        )
+
+        # Enrich with user information
+        enriched_requests = []
+        for request in response.data:
+            # Get user information
+            user_response = (
+                supabase.table("users")
+                .select("email, full_name, phone_number")
+                .eq("id", request["user_id"])
+                .execute()
+            )
+            user_info = user_response.data[0] if user_response.data else {}
+
+            # Add user info to the request
+            enriched_request = {
+                **request,
+                "user_email": user_info.get("email", "Unknown"),
+                "user_name": user_info.get("full_name", "Unknown"),
+                "user_phone": user_info.get("phone_number", "Unknown"),
+            }
+            enriched_requests.append(enriched_request)
+            logger.debug(
+                f"Enriched request: user_info={user_info}, enriched_request keys={list(enriched_request.keys())}",
+            )
+
+        return enriched_requests
+    except Exception as e:
+        logger.error(f"Error in get_all_pickup_requests: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve pickup requests",
+        )
+
+
+@app.put("/admin/pickup-requests/{pickup_id}/status")
+async def update_pickup_request_status(
+    pickup_id: str,
+    status_update: dict,
+    current_admin: AdminUser = Depends(get_current_admin_user),
+):
+    """Update pickup request status (admin only)"""
+    try:
+        new_status = status_update.get("status")
+        if not new_status:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Status is required",
+            )
+
+        # Validate status
+        valid_statuses = [
+            "pending",
+            "confirmed",
+            "in_progress",
+            "completed",
+            "cancelled",
+        ]
+        if new_status not in valid_statuses:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid status. Must be one of: {', '.join(valid_statuses)}",
+            )
+
+        # Update the pickup request
+        response = (
+            supabase.table("pickup_requests")
+            .update({"status": new_status})
+            .eq("id", pickup_id)
+            .execute()
+        )
+
+        if not response.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Pickup request not found",
+            )
+
+        logger.info(f"Admin updated pickup request {pickup_id} status to {new_status}")
+        return {
+            "message": "Status updated successfully",
+            "pickup_id": pickup_id,
+            "new_status": new_status,
+        }
+
+    except Exception as e:
+        logger.error(f"Error in update_pickup_request_status: {str(e)}")
+        if isinstance(e, HTTPException):
+            raise
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update pickup request status",
+        )
+
+
+@app.get("/admin/dashboard-stats")
+async def get_dashboard_stats(
+    current_admin: AdminUser = Depends(get_current_admin_user),
+):
+    """Get dashboard statistics for admin"""
+    try:
+        # Get total pickup requests
+        total_requests_response = (
+            supabase.table("pickup_requests").select("id").execute()
+        )
+        total_requests = (
+            len(total_requests_response.data) if total_requests_response.data else 0
+        )
+
+        # Get pending requests
+        pending_requests_response = (
+            supabase.table("pickup_requests")
+            .select("id")
+            .eq("status", "pending")
+            .execute()
+        )
+        pending_requests = (
+            len(pending_requests_response.data) if pending_requests_response.data else 0
+        )
+
+        # Get paid but unconfirmed requests
+        paid_unconfirmed_response = (
+            supabase.table("pickup_requests")
+            .select("id")
+            .eq("status", "pending")
+            .eq("payment_confirmed", True)
+            .execute()
+        )
+        paid_unconfirmed = (
+            len(paid_unconfirmed_response.data) if paid_unconfirmed_response.data else 0
+        )
+
+        # Get confirmed requests
+        confirmed_requests_response = (
+            supabase.table("pickup_requests")
+            .select("id")
+            .eq("status", "confirmed")
+            .execute()
+        )
+        confirmed_requests = (
+            len(confirmed_requests_response.data)
+            if confirmed_requests_response.data
+            else 0
+        )
+
+        # Get completed requests
+        completed_requests_response = (
+            supabase.table("pickup_requests")
+            .select("id")
+            .eq("status", "completed")
+            .execute()
+        )
+        completed_requests = (
+            len(completed_requests_response.data)
+            if completed_requests_response.data
+            else 0
+        )
+
+        # Get total revenue (sum of all payments)
+        payments_response = supabase.table("payments").select("amount").execute()
+        total_revenue = (
+            sum(payment["amount"] for payment in payments_response.data)
+            if payments_response.data
+            else 0
+        )
+
+        return {
+            "total_requests": total_requests,
+            "pending_requests": pending_requests,
+            "paid_unconfirmed_requests": paid_unconfirmed,
+            "confirmed_requests": confirmed_requests,
+            "completed_requests": completed_requests,
+            "total_revenue": total_revenue,
+        }
+
+    except Exception as e:
+        logger.error(f"Error in get_dashboard_stats: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve dashboard statistics",
+        )
 
 
 # Run the application

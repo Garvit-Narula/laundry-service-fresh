@@ -63,6 +63,7 @@ export interface PickupRequestResponse {
   service_type_ids: string[];
   special_instructions?: string;
   status: string;
+  payment_confirmed: boolean;
   created_at: string;
 }
 
@@ -102,9 +103,31 @@ export interface Invoice {
   }>;
 }
 
+// Add admin-related interfaces
+export interface AdminUser {
+  username: string;
+  is_admin: boolean;
+}
+
+export interface PickupRequestWithUser extends PickupRequestResponse {
+  user_email: string;
+  user_name: string;
+  user_phone: string;
+}
+
+export interface DashboardStats {
+  total_requests: number;
+  pending_requests: number;
+  paid_unconfirmed_requests: number;
+  confirmed_requests: number;
+  completed_requests: number;
+  total_revenue: number;
+}
+
 // Helper functions
-const getAuthHeader = (): Record<string, string> => {
-  const token = localStorage.getItem('token');
+const getAuthHeader = (isAdmin: boolean = false): Record<string, string> => {
+  const tokenKey = isAdmin ? 'adminToken' : 'token';
+  const token = localStorage.getItem(tokenKey);
   return token ? { Authorization: `Bearer ${token}` } : {};
 };
 
@@ -147,6 +170,21 @@ export const api = {
       },
       body: new URLSearchParams({
         username: credentials.email, // OAuth2PasswordRequestForm expects 'username' field
+        password: credentials.password,
+      }),
+    });
+    return handleResponse(response);
+  },
+
+  // Admin Auth
+  async adminLogin(credentials: { username: string; password: string }) {
+    const response = await fetch(`${API_URL}/admin/token`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        username: credentials.username,
         password: credentials.password,
       }),
     });
@@ -250,6 +288,33 @@ export const api = {
   async getInvoice(invoiceId: string): Promise<Invoice> {
     const response = await fetch(`${API_URL}/invoices/${invoiceId}`, {
       headers: getAuthHeader(),
+    });
+    return handleResponse(response);
+  },
+
+  // Admin endpoints
+  async getAllPickupRequests(): Promise<PickupRequestWithUser[]> {
+    const response = await fetch(`${API_URL}/admin/pickup-requests`, {
+      headers: getAuthHeader(true),
+    });
+    return handleResponse(response);
+  },
+
+  async updatePickupRequestStatus(pickupId: string, status: string) {
+    const response = await fetch(`${API_URL}/admin/pickup-requests/${pickupId}/status`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader(true),
+      },
+      body: JSON.stringify({ status }),
+    });
+    return handleResponse(response);
+  },
+
+  async getDashboardStats(): Promise<DashboardStats> {
+    const response = await fetch(`${API_URL}/admin/dashboard-stats`, {
+      headers: getAuthHeader(true),
     });
     return handleResponse(response);
   },
