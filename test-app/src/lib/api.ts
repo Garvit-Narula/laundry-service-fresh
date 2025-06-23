@@ -270,6 +270,13 @@ export const api = {
     return handleResponse(response);
   },
 
+  async getPayments(): Promise<Payment[]> {
+    const response = await fetch(`${API_URL}/payments`, {
+      headers: getAuthHeader(),
+    });
+    return handleResponse(response);
+  },
+
   // Invoices
   async getInvoices(): Promise<Invoice[]> {
     const response = await fetch(`${API_URL}/invoices`, {

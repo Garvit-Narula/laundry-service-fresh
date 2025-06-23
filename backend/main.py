@@ -964,6 +964,24 @@ async def create_payment(
         )
 
 
+@app.get("/payments", response_model=list[Payment])
+async def get_user_payments(current_user: User = Depends(get_current_user)):
+    try:
+        response = (
+            supabase.table("payments")
+            .select("*")
+            .eq("user_id", current_user.id)
+            .execute()
+        )
+        return response.data
+    except Exception as e:
+        logger.error(f"Error in get_user_payments: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve payments",
+        )
+
+
 @app.get("/payments/{payment_id}", response_model=Payment)
 async def get_payment(
     payment_id: str,

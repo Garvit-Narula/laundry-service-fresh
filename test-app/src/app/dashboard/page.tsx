@@ -912,7 +912,17 @@ export default function Dashboard() {
                       : 'text-gray-500 border-transparent hover:text-gray-700 hover:border-gray-300'
                   }`}
                 >
-                  Invoices
+                  My Invoices
+                </button>
+                <button
+                  onClick={() => setActiveTab('profile')}
+                  className={`px-3 py-2 text-sm font-medium border-b-2 ${
+                    activeTab === 'profile'
+                      ? 'text-blue-600 border-blue-600'
+                      : 'text-gray-500 border-transparent hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  Profile Settings
                 </button>
               </div>
             </div>
@@ -975,6 +985,16 @@ export default function Dashboard() {
                 }`}
               >
                 Order History
+              </button>
+              <button
+                onClick={() => setActiveTab('invoices')}
+                className={`w-full text-left px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
+                  activeTab === 'invoices'
+                    ? 'bg-blue-600 text-white'
+                    : 'text-gray-700 hover:bg-gray-100'
+                }`}
+              >
+                My Invoices
               </button>
               <button
                 onClick={() => setActiveTab('profile')}
@@ -1103,12 +1123,39 @@ export default function Dashboard() {
                                {request.address.street}, {request.address.city}
                              </td>
                              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                               <button 
-                                 onClick={() => setActiveTab('invoices')}
-                                 className="text-blue-600 hover:text-blue-900"
-                               >
-                                 View
-                               </button>
+                               {request.payment_confirmed ? (
+                                  <div className="flex gap-2">
+                                    <button 
+                                      onClick={async () => {
+                                        try {
+                                          // Find the invoice for this pickup request
+                                          const invoice = invoices.find(inv => inv.pickup_request_id === request.id);
+                                          if (invoice) {
+                                            router.push(`/invoice/${invoice.id}`);
+                                          } else {
+                                            // If no invoice exists, try to fetch by payment
+                                            const payments = await api.getPayments();
+                                            const payment = payments.find(p => p.pickup_request_id === request.id);
+                                            if (payment) {
+                                              const invoiceByPayment = await api.getInvoiceByPaymentId(payment.id);
+                                              router.push(`/invoice/${invoiceByPayment.id}`);
+                                            } else {
+                                              alert('Invoice not found. Please contact support.');
+                                            }
+                                          }
+                                        } catch (error) {
+                                          console.error('Error finding invoice:', error);
+                                          alert('Unable to load invoice. Please try again.');
+                                        }
+                                      }}
+                                      className="text-blue-600 hover:text-blue-900"
+                                    >
+                                      View Invoice
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <span className="text-gray-400">Payment Required</span>
+                                )}
                              </td>
                            </tr>
                          ))}
